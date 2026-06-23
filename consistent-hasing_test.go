@@ -16,7 +16,9 @@ func TestAddNode(t *testing.T) {
 			"node-1": 100,
 		}))
 
-		if err := hash.AddNode("node-1"); err != nil {
+		if err := hash.AddNode(Node{
+			ID: "node-1",
+		}); err != nil {
 			t.Fatalf("expected no error when add one node, got %v", err.Error())
 		}
 	})
@@ -26,11 +28,11 @@ func TestAddNode(t *testing.T) {
 			"node-1": 100,
 		}))
 
-		if err := hash.AddNode("node-1"); err != nil {
+		if err := hash.AddNode(Node{ID: "node-1"}); err != nil {
 			t.Fatalf("expected no error when add one node, got %v", err.Error())
 		}
 
-		if err := hash.AddNode("node-1"); err == nil {
+		if err := hash.AddNode(Node{ID: "node-1"}); err == nil {
 			t.Fatalf("expected error when add twice twice, got %v", err.Error())
 		}
 	})
@@ -42,9 +44,9 @@ func TestRemoveNode(t *testing.T) {
 			"node-1": 100,
 		}))
 
-		hash.AddNode("node-1")
+		hash.AddNode(Node{ID: "node-1"})
 
-		if err := hash.RemoveNode("node-1"); err != nil {
+		if err := hash.RemoveNode(Node{ID: "node-1"}); err != nil {
 			t.Fatalf("expected no error when remove one node, got %v", err.Error())
 		}
 	})
@@ -54,13 +56,13 @@ func TestRemoveNode(t *testing.T) {
 			"node-1": 100,
 		}))
 
-		hash.AddNode("node-1")
+		hash.AddNode(Node{ID: "node-1"})
 
-		if err := hash.RemoveNode("node-1"); err != nil {
+		if err := hash.RemoveNode(Node{ID: "node-1"}); err != nil {
 			t.Fatalf("expected no error when remove one node, got %v", err.Error())
 		}
 
-		if err := hash.RemoveNode("node-1"); err != nil {
+		if err := hash.RemoveNode(Node{ID: "node-1"}); err != nil {
 			t.Fatalf("expected no error when remove one node, got %v", err.Error())
 		}
 	})
@@ -74,15 +76,15 @@ func TestGetNode(t *testing.T) {
 			"key1":   115,
 		}))
 
-		hash.AddNode("node-1")
-		hash.AddNode("node-2")
+		hash.AddNode(Node{ID: "node-1"})
+		hash.AddNode(Node{ID: "node-2"})
 
 		node, err := hash.GetNode("key1")
 		if err != nil {
 			t.Fatalf("expected no error when get one node, got %v", err.Error())
 		}
 
-		if node != "node-2" {
+		if node.ID != "node-2" {
 			t.Fatalf("expected node to be node-1, got %v", node)
 		}
 	})
@@ -95,7 +97,7 @@ func TestGetNode(t *testing.T) {
 			t.Fatalf("expected error when get one node, got %v", err.Error())
 		}
 
-		if node != "" {
+		if node.ID != "" {
 			t.Fatalf("expected node to be empty, got %v", node)
 		}
 	})
@@ -107,9 +109,9 @@ func TestGetNode(t *testing.T) {
 			"node-3":   300,
 			"user-123": 1121,
 		}))
-		hash.AddNode("node-1")
-		hash.AddNode("node-2")
-		hash.AddNode("node-3")
+		hash.AddNode(Node{ID: "node-1"})
+		hash.AddNode(Node{ID: "node-2"})
+		hash.AddNode(Node{ID: "node-3"})
 
 		n1, _ := hash.GetNode("user-123")
 		n2, _ := hash.GetNode("user-123")
@@ -127,13 +129,13 @@ func TestGetNode(t *testing.T) {
 			"user-123": 1121,
 		}))
 
-		hash.AddNode("node-2")
-		hash.AddNode("node-3")
-		hash.AddNode("node-1")
+		hash.AddNode(Node{ID: "node-2"})
+		hash.AddNode(Node{ID: "node-3"})
+		hash.AddNode(Node{ID: "node-1"})
 
 		node, _ := hash.GetNode("user-123")
 
-		if node != "node-1" {
+		if node.ID != "node-1" {
 			t.Fatalf("expected node to be node-1, got %v", node)
 		}
 	})
@@ -152,21 +154,28 @@ func TestConsistentHash_AddNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 	}
 	hash := NewConsistentHash(makeHashFunc(mapping))
 
-	hash.AddNode("node-1")
-	hash.AddNode("node-2")
-	hash.AddNode("node-3")
+	hash.AddNode(Node{ID: "node-1"})
+	hash.AddNode(Node{ID: "node-3"})
+	hash.AddNode(Node{ID: "node-2"})
 
-	before := make(map[string]string)
-	for key := range mapping {
-		node, _ := hash.GetNode(key)
-		before[key] = node
+	keys := []string{
+		"key-1",
+		"key-2",
+		"key-3",
+		"key-4",
 	}
 
-	hash.AddNode("node-4")
-	after := make(map[string]string)
-	for key := range mapping {
+	before := make(map[string]string)
+	for _, key := range keys {
 		node, _ := hash.GetNode(key)
-		after[key] = node
+		before[key] = node.ID
+	}
+
+	hash.AddNode(Node{ID: "node-4"})
+	after := make(map[string]string)
+	for _, key := range keys {
+		node, _ := hash.GetNode(key)
+		after[key] = node.ID
 	}
 
 	moved := 0
@@ -177,8 +186,12 @@ func TestConsistentHash_AddNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 		}
 	}
 
-	if moved == len(mapping) {
-		t.Fatalf("expected not all keys remapped")
+	if moved == 0 {
+		t.Fatal("expected some keys remapped")
+	}
+
+	if moved >= len(keys) {
+		t.Fatal("expected only subset of keys remapped")
 	}
 }
 
@@ -195,22 +208,29 @@ func TestConsistentHash_RemoveNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 	}
 	hash := NewConsistentHash(makeHashFunc(mapping))
 
-	hash.AddNode("node-1")
-	hash.AddNode("node-2")
-	hash.AddNode("node-3")
-	hash.AddNode("node-4")
+	hash.AddNode(Node{ID: "node-1"})
+	hash.AddNode(Node{ID: "node-2"})
+	hash.AddNode(Node{ID: "node-3"})
+	hash.AddNode(Node{ID: "node-4"})
 
-	before := make(map[string]string)
-	for key := range mapping {
-		node, _ := hash.GetNode(key)
-		before[key] = node
+	keys := []string{
+		"key-1",
+		"key-2",
+		"key-3",
+		"key-4",
 	}
 
-	hash.RemoveNode("node-4")
-	after := make(map[string]string)
-	for key := range mapping {
+	before := make(map[string]string)
+	for _, key := range keys {
 		node, _ := hash.GetNode(key)
-		after[key] = node
+		before[key] = node.ID
+	}
+
+	hash.RemoveNode(Node{ID: "node-4"})
+	after := make(map[string]string)
+	for _, key := range keys {
+		node, _ := hash.GetNode(key)
+		after[key] = node.ID
 	}
 
 	moved := 0
@@ -220,7 +240,15 @@ func TestConsistentHash_RemoveNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 		}
 	}
 
-	if moved == len(mapping) {
-		t.Fatalf("expected not all keys remapped")
+	if moved == 0 {
+		t.Fatal("expected some keys remapped")
 	}
+
+	if moved >= len(keys) {
+		t.Fatal("expected only subset of keys remapped")
+	}
+}
+
+func TestConsistentHash_VirtualNodeImproveDistributionEvenly(t *testing.T) {
+
 }
