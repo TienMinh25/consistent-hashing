@@ -13,19 +13,6 @@ var DefaultHashFunction HashFunc = func(key string) uint32 {
 	return uint32(sum[0])<<24 | uint32(sum[1])<<16 | uint32(sum[2])<<8 | uint32(sum[3])
 }
 
-type Node struct {
-	ID     string
-	Weight int
-}
-
-type ConsistentHash interface {
-	GetNode(keyStr string) (Node, error)
-	AddNode(node Node) error
-	RemoveNode(node Node) error
-}
-
-type HashFunc func(string) uint32
-
 type consistentHash struct {
 	mux               sync.RWMutex
 	hashToNode        map[uint32]Node
