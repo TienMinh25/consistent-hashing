@@ -8,15 +8,15 @@ import (
 	"time"
 )
 
-func makeHashFunc(mapping map[string]uint32) HashFunc {
-	return func(key string) uint32 {
+func makeHashFunc(mapping map[string]uint64) HashFunc {
+	return func(key string) uint64 {
 		return mapping[key]
 	}
 }
 
 func TestAddNode(t *testing.T) {
 	t.Run("add node successfully", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1": 100,
 		}), 100)
 
@@ -28,7 +28,7 @@ func TestAddNode(t *testing.T) {
 	})
 
 	t.Run("add one node twice -> should return error in turn 2", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1": 100,
 		}), 100)
 
@@ -44,7 +44,7 @@ func TestAddNode(t *testing.T) {
 
 func TestRemoveNode(t *testing.T) {
 	t.Run("remove node successfully", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1": 100,
 		}), 100)
 
@@ -55,8 +55,8 @@ func TestRemoveNode(t *testing.T) {
 		}
 	})
 
-	t.Run("remove one node twice -> successfully", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+	t.Run("remove one node twice -> error", func(t *testing.T) {
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1": 100,
 		}), 100)
 
@@ -66,15 +66,15 @@ func TestRemoveNode(t *testing.T) {
 			t.Fatalf("expected no error when remove one node, got %v", err.Error())
 		}
 
-		if err := hash.RemoveNode(Node{ID: "node-1"}); err != nil {
-			t.Fatalf("expected no error when remove one node, got %v", err.Error())
+		if err := hash.RemoveNode(Node{ID: "node-1"}); err == nil {
+			t.Fatalf("expected error when remove one node twice, got %v", err.Error())
 		}
 	})
 }
 
 func TestGetNode(t *testing.T) {
 	t.Run("get node successfully", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1": 100,
 			"node-2": 200,
 			"key1":   115,
@@ -94,7 +94,7 @@ func TestGetNode(t *testing.T) {
 	})
 
 	t.Run("get node while ring is empty -> error", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{}), 100)
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{}), 100)
 
 		node, err := hash.GetNode("node-1")
 		if err == nil {
@@ -107,7 +107,7 @@ func TestGetNode(t *testing.T) {
 	})
 
 	t.Run("same key -> same node", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1":   100,
 			"node-2":   200,
 			"node-3":   300,
@@ -126,7 +126,7 @@ func TestGetNode(t *testing.T) {
 	})
 
 	t.Run("key hash greater than all server hash value -> return node has smallest hash value", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
+		hash := NewConsistentHash(makeHashFunc(map[string]uint64{
 			"node-1":   100,
 			"node-2":   200,
 			"node-3":   300,
@@ -146,7 +146,7 @@ func TestGetNode(t *testing.T) {
 }
 
 func TestConsistentHash_AddNodeAffectsOnlySubsetOfKeys(t *testing.T) {
-	mapping := map[string]uint32{
+	mapping := map[string]uint64{
 		"node-1": 100,
 		"node-2": 200,
 		"node-3": 300,
@@ -200,7 +200,7 @@ func TestConsistentHash_AddNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 }
 
 func TestConsistentHash_RemoveNodeAffectsOnlySubsetOfKeys(t *testing.T) {
-	mapping := map[string]uint32{
+	mapping := map[string]uint64{
 		"node-1": 100,
 		"node-2": 200,
 		"node-3": 300,

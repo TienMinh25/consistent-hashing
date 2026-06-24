@@ -3,6 +3,7 @@ package consistenthashing
 type Node struct {
 	ID     string
 	Weight int
+	Hash   uint64
 }
 
 type ConsistentHash interface {
@@ -11,4 +12,4 @@ type ConsistentHash interface {
 	RemoveNode(node Node) error
 }
 
-type HashFunc func(string) uint32
+type HashFunc func(string) uint64
