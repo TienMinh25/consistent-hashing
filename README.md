@@ -10,7 +10,7 @@ This project was built incrementally to understand consistent hashing at a level
 - **Virtual nodes** — each physical node is represented by many points on the ring, which smooths out the uneven load distribution that plain consistent hashing suffers from when there are few nodes.
 - **Weighted nodes** — nodes can be assigned a `Weight`, which scales their virtual node count proportionally. A node with `Weight: 2` gets twice the ring real estate (and therefore roughly twice the traffic) of a node with `Weight: 1`.
 - **Thread-safe** — all operations are safe for concurrent use via `sync.RWMutex`, tuned for a read-heavy / write-rare access pattern (`GetNode` is called far more often than `AddNode`/`RemoveNode`).
-- **MD5-based default hashing** — chosen after benchmarking showed CRC32 produces a noticeably less uniform distribution than MD5 at this scale (see [Design Decisions](#design-decisions)).
+- **MD5-based default hashing** — chosen after benchmarking showed CRC32 produces a noticeably less uniform distribution than MD5 at this scale.
 
 ## Installation
 
