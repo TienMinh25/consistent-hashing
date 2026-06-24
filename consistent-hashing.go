@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 )
 
 var DefaultHashFunction HashFunc = func(key string) uint32 {
@@ -26,6 +27,7 @@ type ConsistentHash interface {
 type HashFunc func(string) uint32
 
 type consistentHash struct {
+	mux               sync.RWMutex
 	hashToNode        map[uint32]Node
 	sortedHashes      []uint32
 	hashFn            HashFunc
@@ -35,6 +37,8 @@ type consistentHash struct {
 }
 
 func (c *consistentHash) GetNode(keyStr string) (Node, error) {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 	if len(c.hashToNode) == 0 {
 		return Node{}, errors.New("consistent hash node not found")
 	}
@@ -59,6 +63,8 @@ func (c *consistentHash) GetNode(keyStr string) (Node, error) {
 }
 
 func (c *consistentHash) AddNode(node Node) error {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	key := c.hashFn(node.ID)
 	if _, isExist := c.hashToNode[key]; isExist {
 		return errors.New("node already exists")
@@ -66,7 +72,7 @@ func (c *consistentHash) AddNode(node Node) error {
 
 	c.hashToNode[key] = node
 	c.sortedHashes = append(c.sortedHashes, key)
-	
+
 	numVirtualNode := c.baseVirtualNodes * node.Weight
 	for i := 0; i < numVirtualNode; i++ {
 		virtualNodeID := fmt.Sprintf("%s#%d", node.ID, i)
@@ -81,6 +87,8 @@ func (c *consistentHash) AddNode(node Node) error {
 }
 
 func (c *consistentHash) RemoveNode(node Node) error {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	key := c.hashFn(node.ID)
 
 	if _, isExist := c.hashToNode[key]; isExist {

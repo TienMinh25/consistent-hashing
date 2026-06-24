@@ -3,7 +3,9 @@ package consistenthashing
 import (
 	"fmt"
 	"math"
+	"sync"
 	"testing"
+	"time"
 )
 
 func makeHashFunc(mapping map[string]uint32) HashFunc {
@@ -319,4 +321,38 @@ func TestConsistentHash_WeightedDistribution(t *testing.T) {
 			t.Fatalf("%s: expected ~%.0f keys, got %d (ratio=%.2f)", id, expected, counts[id], ratio)
 		}
 	}
+}
+
+func TestConsistentHash_ConcurrentAccess(t *testing.T) {
+	hash := NewConsistentHash(DefaultHashFunction, 100)
+
+	for i := 0; i < 5; i++ {
+		hash.AddNode(Node{ID: fmt.Sprintf("seed-node-%d", i), Weight: 1})
+	}
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 1000; j++ {
+				key := fmt.Sprintf("key-%d-%d", id, j)
+				_, _ = hash.GetNode(key)
+			}
+		}(i)
+	}
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			nodeID := fmt.Sprintf("dynamic-node-%d", id)
+			hash.AddNode(Node{ID: nodeID, Weight: 1})
+			time.Sleep(time.Millisecond)
+			hash.RemoveNode(Node{ID: nodeID})
+		}(i)
+	}
+
+	wg.Wait()
 }
