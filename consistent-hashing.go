@@ -1,17 +1,20 @@
 package consistenthashing
 
 import (
+	"crypto/md5"
 	"errors"
-	"hash/crc32"
+	"fmt"
 	"sort"
 )
 
 var DefaultHashFunction HashFunc = func(key string) uint32 {
-	return crc32.ChecksumIEEE([]byte(key))
+	sum := md5.Sum([]byte(key))
+	return uint32(sum[0])<<24 | uint32(sum[1])<<16 | uint32(sum[2])<<8 | uint32(sum[3])
 }
 
 type Node struct {
-	ID string
+	ID          string
+	VirtualNode int
 }
 
 type ConsistentHash interface {
@@ -23,9 +26,10 @@ type ConsistentHash interface {
 type HashFunc func(string) uint32
 
 type consistentHash struct {
-	hashToNode   map[uint32]Node
-	sortedHashes []uint32
-	hashFn       HashFunc
+	hashToNode        map[uint32]Node
+	sortedHashes      []uint32
+	hashFn            HashFunc
+	virtualNodeToNode map[uint32]Node
 }
 
 func (c *consistentHash) GetNode(keyStr string) (Node, error) {
@@ -45,6 +49,10 @@ func (c *consistentHash) GetNode(keyStr string) (Node, error) {
 		nodeHashFind = c.sortedHashes[idx]
 	}
 
+	if node, isExist := c.virtualNodeToNode[nodeHashFind]; isExist {
+		return node, nil
+	}
+
 	return c.hashToNode[nodeHashFind], nil
 }
 
@@ -56,6 +64,12 @@ func (c *consistentHash) AddNode(node Node) error {
 
 	c.hashToNode[key] = node
 	c.sortedHashes = append(c.sortedHashes, key)
+	for i := 0; i < node.VirtualNode; i++ {
+		virtualNodeID := fmt.Sprintf("%s#%d", node.ID, i)
+		virtualNodeHash := c.hashFn(virtualNodeID)
+		c.virtualNodeToNode[virtualNodeHash] = node
+		c.sortedHashes = append(c.sortedHashes, virtualNodeHash)
+	}
 	sort.Slice(c.sortedHashes, func(i, j int) bool { return c.sortedHashes[i] < c.sortedHashes[j] })
 	return nil
 }
@@ -66,9 +80,19 @@ func (c *consistentHash) RemoveNode(node Node) error {
 	if _, isExist := c.hashToNode[key]; isExist {
 		delete(c.hashToNode, key)
 
+		hashesToRemove := map[uint32]struct{}{
+			key: {},
+		}
+		for i := 0; i < node.VirtualNode; i++ {
+			virtualNodeID := fmt.Sprintf("%s#%d", node.ID, i)
+			virtualNodeHash := c.hashFn(virtualNodeID)
+			hashesToRemove[virtualNodeHash] = struct{}{}
+			delete(c.virtualNodeToNode, virtualNodeHash)
+		}
+
 		sortedHashes := make([]uint32, 0, len(c.sortedHashes)-1)
 		for _, hash := range c.sortedHashes {
-			if hash != key {
+			if _, exists := hashesToRemove[hash]; !exists {
 				sortedHashes = append(sortedHashes, hash)
 			}
 		}
@@ -80,8 +104,9 @@ func (c *consistentHash) RemoveNode(node Node) error {
 
 func NewConsistentHash(hashFunc HashFunc) ConsistentHash {
 	return &consistentHash{
-		hashToNode:   make(map[uint32]Node),
-		sortedHashes: make([]uint32, 0),
-		hashFn:       hashFunc,
+		hashToNode:        make(map[uint32]Node),
+		sortedHashes:      make([]uint32, 0),
+		hashFn:            hashFunc,
+		virtualNodeToNode: make(map[uint32]Node),
 	}
 }

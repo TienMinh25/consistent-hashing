@@ -1,6 +1,8 @@
 package consistenthashing
 
 import (
+	"fmt"
+	"math"
 	"testing"
 )
 
@@ -250,5 +252,37 @@ func TestConsistentHash_RemoveNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 }
 
 func TestConsistentHash_VirtualNodeImproveDistributionEvenly(t *testing.T) {
+	const (
+		numNodes        = 10
+		numVirtualNodes = 100
+		numKeys         = 10000
+	)
+	hash := NewConsistentHash(DefaultHashFunction)
 
+	for idx := 0; idx < numNodes; idx++ {
+		hash.AddNode(Node{ID: fmt.Sprintf("node-%d", idx), VirtualNode: numVirtualNodes})
+	}
+
+	counts := make(map[string]int)
+	for idx := 0; idx < numKeys; idx++ {
+		key := fmt.Sprintf("key-%d", idx)
+		node, _ := hash.GetNode(key)
+		counts[node.ID]++
+	}
+
+	mean := float64(numKeys) / float64(numNodes) // the average number of keys per node
+
+	var sumSqDiff float64
+	for key, count := range counts {
+		fmt.Println(key, count)
+		diff := float64(count) - mean // the deviation of each node from the desired average value
+		sumSqDiff += diff * diff // the sum of the squares of the deviations
+	}
+	stdDev := math.Sqrt(sumSqDiff/ float64(numNodes)) // the standard deviation of the number of keys per node
+	cv := stdDev / mean // percentage of standard deviation
+
+	t.Logf("mean=%v stdDev=%v cv=%.2f%%", mean, stdDev, cv*100)
+	if cv > 0.15 {
+		t.Fatalf("expected coefficient of variation <= 15%%, got %.2f%%", cv*100)
+	}
 }
