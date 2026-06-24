@@ -13,8 +13,8 @@ var DefaultHashFunction HashFunc = func(key string) uint32 {
 }
 
 type Node struct {
-	ID          string
-	VirtualNode int
+	ID     string
+	Weight int
 }
 
 type ConsistentHash interface {
@@ -30,6 +30,8 @@ type consistentHash struct {
 	sortedHashes      []uint32
 	hashFn            HashFunc
 	virtualNodeToNode map[uint32]Node
+	baseVirtualNodes  int
+	virtualNodeCount  map[string]int
 }
 
 func (c *consistentHash) GetNode(keyStr string) (Node, error) {
@@ -64,12 +66,16 @@ func (c *consistentHash) AddNode(node Node) error {
 
 	c.hashToNode[key] = node
 	c.sortedHashes = append(c.sortedHashes, key)
-	for i := 0; i < node.VirtualNode; i++ {
+	
+	numVirtualNode := c.baseVirtualNodes * node.Weight
+	for i := 0; i < numVirtualNode; i++ {
 		virtualNodeID := fmt.Sprintf("%s#%d", node.ID, i)
 		virtualNodeHash := c.hashFn(virtualNodeID)
 		c.virtualNodeToNode[virtualNodeHash] = node
 		c.sortedHashes = append(c.sortedHashes, virtualNodeHash)
 	}
+	c.virtualNodeCount[node.ID] = numVirtualNode
+
 	sort.Slice(c.sortedHashes, func(i, j int) bool { return c.sortedHashes[i] < c.sortedHashes[j] })
 	return nil
 }
@@ -78,12 +84,14 @@ func (c *consistentHash) RemoveNode(node Node) error {
 	key := c.hashFn(node.ID)
 
 	if _, isExist := c.hashToNode[key]; isExist {
+		numVirtualNode := c.virtualNodeCount[node.ID]
+		delete(c.virtualNodeCount, node.ID)
 		delete(c.hashToNode, key)
 
 		hashesToRemove := map[uint32]struct{}{
 			key: {},
 		}
-		for i := 0; i < node.VirtualNode; i++ {
+		for i := 0; i < numVirtualNode; i++ {
 			virtualNodeID := fmt.Sprintf("%s#%d", node.ID, i)
 			virtualNodeHash := c.hashFn(virtualNodeID)
 			hashesToRemove[virtualNodeHash] = struct{}{}
@@ -102,11 +110,13 @@ func (c *consistentHash) RemoveNode(node Node) error {
 	return nil
 }
 
-func NewConsistentHash(hashFunc HashFunc) ConsistentHash {
+func NewConsistentHash(hashFunc HashFunc, baseVirtualNodes int) ConsistentHash {
 	return &consistentHash{
 		hashToNode:        make(map[uint32]Node),
 		sortedHashes:      make([]uint32, 0),
 		hashFn:            hashFunc,
 		virtualNodeToNode: make(map[uint32]Node),
+		baseVirtualNodes:  baseVirtualNodes,
+		virtualNodeCount:  make(map[string]int),
 	}
 }

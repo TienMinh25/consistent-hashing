@@ -16,7 +16,7 @@ func TestAddNode(t *testing.T) {
 	t.Run("add node successfully", func(t *testing.T) {
 		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
 			"node-1": 100,
-		}))
+		}), 100)
 
 		if err := hash.AddNode(Node{
 			ID: "node-1",
@@ -28,7 +28,7 @@ func TestAddNode(t *testing.T) {
 	t.Run("add one node twice -> should return error in turn 2", func(t *testing.T) {
 		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
 			"node-1": 100,
-		}))
+		}), 100)
 
 		if err := hash.AddNode(Node{ID: "node-1"}); err != nil {
 			t.Fatalf("expected no error when add one node, got %v", err.Error())
@@ -44,7 +44,7 @@ func TestRemoveNode(t *testing.T) {
 	t.Run("remove node successfully", func(t *testing.T) {
 		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
 			"node-1": 100,
-		}))
+		}), 100)
 
 		hash.AddNode(Node{ID: "node-1"})
 
@@ -56,7 +56,7 @@ func TestRemoveNode(t *testing.T) {
 	t.Run("remove one node twice -> successfully", func(t *testing.T) {
 		hash := NewConsistentHash(makeHashFunc(map[string]uint32{
 			"node-1": 100,
-		}))
+		}), 100)
 
 		hash.AddNode(Node{ID: "node-1"})
 
@@ -76,7 +76,7 @@ func TestGetNode(t *testing.T) {
 			"node-1": 100,
 			"node-2": 200,
 			"key1":   115,
-		}))
+		}), 100)
 
 		hash.AddNode(Node{ID: "node-1"})
 		hash.AddNode(Node{ID: "node-2"})
@@ -92,7 +92,7 @@ func TestGetNode(t *testing.T) {
 	})
 
 	t.Run("get node while ring is empty -> error", func(t *testing.T) {
-		hash := NewConsistentHash(makeHashFunc(map[string]uint32{}))
+		hash := NewConsistentHash(makeHashFunc(map[string]uint32{}), 100)
 
 		node, err := hash.GetNode("node-1")
 		if err == nil {
@@ -110,7 +110,7 @@ func TestGetNode(t *testing.T) {
 			"node-2":   200,
 			"node-3":   300,
 			"user-123": 1121,
-		}))
+		}), 100)
 		hash.AddNode(Node{ID: "node-1"})
 		hash.AddNode(Node{ID: "node-2"})
 		hash.AddNode(Node{ID: "node-3"})
@@ -129,7 +129,7 @@ func TestGetNode(t *testing.T) {
 			"node-2":   200,
 			"node-3":   300,
 			"user-123": 1121,
-		}))
+		}), 100)
 
 		hash.AddNode(Node{ID: "node-2"})
 		hash.AddNode(Node{ID: "node-3"})
@@ -154,7 +154,7 @@ func TestConsistentHash_AddNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 		"key-3":  250,
 		"key-4":  350,
 	}
-	hash := NewConsistentHash(makeHashFunc(mapping))
+	hash := NewConsistentHash(makeHashFunc(mapping), 100)
 
 	hash.AddNode(Node{ID: "node-1"})
 	hash.AddNode(Node{ID: "node-3"})
@@ -208,7 +208,7 @@ func TestConsistentHash_RemoveNodeAffectsOnlySubsetOfKeys(t *testing.T) {
 		"key-3":  250,
 		"key-4":  350,
 	}
-	hash := NewConsistentHash(makeHashFunc(mapping))
+	hash := NewConsistentHash(makeHashFunc(mapping), 100)
 
 	hash.AddNode(Node{ID: "node-1"})
 	hash.AddNode(Node{ID: "node-2"})
@@ -257,10 +257,10 @@ func TestConsistentHash_VirtualNodeImproveDistributionEvenly(t *testing.T) {
 		numVirtualNodes = 100
 		numKeys         = 10000
 	)
-	hash := NewConsistentHash(DefaultHashFunction)
+	hash := NewConsistentHash(DefaultHashFunction, 100)
 
 	for idx := 0; idx < numNodes; idx++ {
-		hash.AddNode(Node{ID: fmt.Sprintf("node-%d", idx), VirtualNode: numVirtualNodes})
+		hash.AddNode(Node{ID: fmt.Sprintf("node-%d", idx), Weight: 1})
 	}
 
 	counts := make(map[string]int)
@@ -276,13 +276,47 @@ func TestConsistentHash_VirtualNodeImproveDistributionEvenly(t *testing.T) {
 	for key, count := range counts {
 		fmt.Println(key, count)
 		diff := float64(count) - mean // the deviation of each node from the desired average value
-		sumSqDiff += diff * diff // the sum of the squares of the deviations
+		sumSqDiff += diff * diff      // the sum of the squares of the deviations
 	}
-	stdDev := math.Sqrt(sumSqDiff/ float64(numNodes)) // the standard deviation of the number of keys per node
-	cv := stdDev / mean // percentage of standard deviation
+	stdDev := math.Sqrt(sumSqDiff / float64(numNodes)) // the standard deviation of the number of keys per node
+	cv := stdDev / mean                                // percentage of standard deviation
 
 	t.Logf("mean=%v stdDev=%v cv=%.2f%%", mean, stdDev, cv*100)
 	if cv > 0.15 {
 		t.Fatalf("expected coefficient of variation <= 15%%, got %.2f%%", cv*100)
+	}
+}
+
+func TestConsistentHash_WeightedDistribution(t *testing.T) {
+	hash := NewConsistentHash(DefaultHashFunction, 100) // 100 is base virtual node
+
+	hash.AddNode(Node{ID: "node-1", Weight: 1})
+	hash.AddNode(Node{ID: "node-3", Weight: 3})
+	hash.AddNode(Node{ID: "node-2", Weight: 2})
+
+	counts := make(map[string]int)
+	const numKeys = 60000
+	for i := 0; i < numKeys; i++ {
+		key := fmt.Sprintf("key-%d", i)
+		node, _ := hash.GetNode(key)
+		counts[node.ID]++
+	}
+
+	t.Logf("counts=%v", counts)
+
+	totalWeight := 6 // sum of weights: 1 + 3 + 2
+	expectedDistribution := map[string]float64{
+		"node-1": numKeys * 1.0 / float64(totalWeight),
+		"node-2": numKeys * 2.0 / float64(totalWeight),
+		"node-3": numKeys * 3.0 / float64(totalWeight),
+	}
+
+	for id, expected := range expectedDistribution {
+		actual := float64(counts[id])
+		ratio := actual / expected
+		// margin % is 15% (0.85 to 1.15)
+		if ratio < 0.85 || ratio > 1.15 {
+			t.Fatalf("%s: expected ~%.0f keys, got %d (ratio=%.2f)", id, expected, counts[id], ratio)
+		}
 	}
 }
